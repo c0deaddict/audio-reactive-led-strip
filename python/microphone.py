@@ -6,19 +6,25 @@ import config
 
 def start_stream(callback):
     p = pyaudio.PyAudio()
-    frames_per_buffer = int(config.MIC_RATE / config.FPS)
-    stream = p.open(format=pyaudio.paInt16,
-                    channels=1,
+    # List the devices and the sample rates.
+    print('\n'.join([str(y['index']) + ' ' + y['name'] + ' ' + str(y['defaultSampleRate']) + ' ' + str(y['maxOutputChannels'])
+                     for y in [p.get_device_info_by_index(x)
+                               for x in range(p.get_device_count())]]))
+
+    frames_per_buffer = int(config.MIC_RATE / (config.FPS))
+    stream = p.open(format=pyaudio.paInt32,
+                    channels=2,
                     rate=config.MIC_RATE,
                     input=True,
+                    input_device_index=config.MIC_DEVICE,
                     frames_per_buffer=frames_per_buffer)
     overflows = 0
     prev_ovf_time = time.time()
     while True:
         try:
-            y = np.fromstring(stream.read(frames_per_buffer, exception_on_overflow=False), dtype=np.int16)
+            y = np.fromstring(stream.read(frames_per_buffer, exception_on_overflow=True), dtype=np.int32)
             y = y.astype(np.float32)
-            stream.read(stream.get_read_available(), exception_on_overflow=False)
+            # stream.read(stream.get_read_available(), exception_on_overflow=False)
             callback(y)
         except IOError:
             overflows += 1

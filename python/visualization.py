@@ -191,12 +191,13 @@ prev_fps_update = time.time()
 def microphone_update(audio_samples):
     global y_roll, prev_rms, prev_exp, prev_fps_update
     # Normalize samples between 0 and 1
-    y = audio_samples / 2.0**15
+    y = audio_samples / 2.0**31  # XXX: using 32-bits now
     # Construct a rolling window of audio samples
+    y = y[800:] # XXX: take data from right channel only.
     y_roll[:-1] = y_roll[1:]
     y_roll[-1, :] = np.copy(y)
     y_data = np.concatenate(y_roll, axis=0).astype(np.float32)
-    
+
     vol = np.max(np.abs(y_data))
     if vol < config.MIN_VOLUME_THRESHOLD:
         print('No audio input. Volume below threshold. Volume:', vol)
@@ -234,7 +235,7 @@ def microphone_update(audio_samples):
             b_curve.setData(y=led.pixels[2])
     if config.USE_GUI:
         app.processEvents()
-    
+
     if config.DISPLAY_FPS:
         fps = frames_per_second()
         if time.time() - 0.5 > prev_fps_update:

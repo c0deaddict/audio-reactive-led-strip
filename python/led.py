@@ -30,6 +30,10 @@ elif config.DEVICE == 'blinkstick':
     # Create a listener that turns the leds off when the program terminates
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+elif config.DEVICE == 'serial':
+    import serial
+    ser = serial.Serial(config.SERIAL_PORT, config.SERIAL_BAUD, timeout=1.0/(8*config.DISPLAY_FPS))
+    print(ser.name)
 
 _gamma = np.load(config.GAMMA_TABLE_PATH)
 """Gamma lookup table used for nonlinear brightness correction"""
@@ -113,7 +117,7 @@ def _update_blinkstick():
         This function updates the LED strip with new values.
     """
     global pixels
-    
+
     # Truncate values and cast to integer
     pixels = np.clip(pixels, 0, 255).astype(int)
     # Optional gamma correction
@@ -134,6 +138,29 @@ def _update_blinkstick():
     #send the data to the blinkstick
     stick.set_led_data(0, newstrip)
 
+def _update_serial():
+    """Writes new LED values to the Serial port.
+        This function updates the LED strip with new values.
+    """
+    global pixels
+    # Truncate values and cast to integer
+    pixels = np.clip(pixels, 0, 255).astype(int)
+    # Optionally apply gamma correc tio
+    p = _gamma[pixels] if config.SOFTWARE_GAMMA_CORRECTION else np.copy(pixels)
+    # Build message.
+    m = bytearray()
+    for i in range(pixels.shape[1]):
+        m.append(p[0][i])  # Pixel red value
+        m.append(p[1][i])  # Pixel green value
+        m.append(p[2][i])  # Pixel blue value
+    ser.write(m)
+    res = ser.read(1)
+    if len(res) == 0:
+        print('serial: timeout')
+    elif res[0] == 0x00:
+        print('serial: out of sync')
+    elif res[0] == 0x01:
+        pass
 
 def update():
     """Updates the LED strip values"""
@@ -143,6 +170,8 @@ def update():
         _update_pi()
     elif config.DEVICE == 'blinkstick':
         _update_blinkstick()
+    elif config.DEVICE == 'serial':
+        _update_serial()
     else:
         raise ValueError('Invalid device selected')
 

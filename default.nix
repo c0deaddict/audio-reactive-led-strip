@@ -14,6 +14,8 @@ let
       scipy
       pyaudio
       pyqtgraph
+      pyserial
+      jedi # dev
     ];
   };
 
