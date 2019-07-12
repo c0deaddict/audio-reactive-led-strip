@@ -34,6 +34,9 @@ elif config.DEVICE == 'serial':
     import serial
     ser = serial.Serial(config.SERIAL_PORT, config.SERIAL_BAUD, timeout=1.0/(8*config.DISPLAY_FPS))
     print(ser.name)
+elif config.DEVICE == 'led-table':
+    import socket
+    _sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 _gamma = np.load(config.GAMMA_TABLE_PATH)
 """Gamma lookup table used for nonlinear brightness correction"""
@@ -162,6 +165,47 @@ def _update_serial():
     elif res[0] == 0x01:
         pass
 
+def _update_led_table():
+    """Sends UDP packets to ESP8266 to update LED strip values
+
+    The ESP8266 will receive and decode the packets to determine what values
+    to display on the LED strip. The communication protocol supports LED strips
+    with a maximum of 256 LEDs.
+
+    The packet encoding scheme is:
+        |i|r|g|b|
+    where
+        i (0 to 255): Index of LED to change (zero-based)
+        r (0 to 255): Red value of LED
+        g (0 to 255): Green value of LED
+        b (0 to 255): Blue value of LED
+    """
+    global pixels, _prev_pixels
+    # Truncate values and cast to integer
+    pixels = np.clip(pixels, 0, 255).astype(int)
+    # Optionally apply gamma correc tio
+    p = _gamma[pixels] if config.SOFTWARE_GAMMA_CORRECTION else np.copy(pixels)
+    MAX_PIXELS_PER_PACKET = 255
+    # Pixel indices
+    idx = range(pixels.shape[1])
+    idx = [i for i in idx if not np.array_equal(p[:, i], _prev_pixels[:, i])]
+    n_packets = len(idx) // MAX_PIXELS_PER_PACKET + 1
+    idx = np.array_split(idx, n_packets)
+    for packet_indices in idx:
+        l = len(packet_indices)*5
+        m = [0, 1, (l >> 8) & 0xff, l & 0xff]
+        for i in packet_indices:
+            x = i % 15
+            y = i // 15
+            m.append(x)
+            m.append(y)
+            m.append(p[0][i])  # Pixel red value
+            m.append(p[1][i])  # Pixel green value
+            m.append(p[2][i])  # Pixel blue value
+        m = bytes(m)
+        _sock.sendto(m, (config.UDP_IP, config.UDP_PORT))
+    _prev_pixels = np.copy(p)
+
 def update():
     """Updates the LED strip values"""
     if config.DEVICE == 'esp8266':
@@ -172,6 +216,8 @@ def update():
         _update_blinkstick()
     elif config.DEVICE == 'serial':
         _update_serial()
+    elif config.DEVICE == 'led-table':
+        _update_led_table()
     else:
         raise ValueError('Invalid device selected')
 

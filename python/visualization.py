@@ -193,7 +193,7 @@ def microphone_update(audio_samples):
     # Normalize samples between 0 and 1
     y = audio_samples / 2.0**31  # XXX: using 32-bits now
     # Construct a rolling window of audio samples
-    y = y[800:] # XXX: take data from right channel only.
+    y = y[1600:] # XXX: take data from right channel only.
     y_roll[:-1] = y_roll[1:]
     y_roll[-1, :] = np.copy(y)
     y_data = np.concatenate(y_roll, axis=0).astype(np.float32)
